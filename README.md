@@ -4,6 +4,28 @@
 [![NuGet](https://img.shields.io/nuget/v/DouyinOpenApi.svg)](https://www.nuget.org/packages/DouyinOpenApi)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
+> ## ⚠️ 请先读：项目来源与测试覆盖
+>
+> **本项目由 AI 生成**（在人工指导下逐轮调试完成）。请按「公共链路可用、具体接口需自测」的预期使用。
+>
+> | 项 | 实际情况 |
+> | --- | --- |
+> | 代码来源 | 4127 个模型、639 个接口由 `tools/gen_csharp.py` 从官方 Go SDK 源码**机械翻译**；`Core/` 下的运行时是手写的 |
+> | 自动化测试 | 32 项（`net47` + `net8.0` 双跑），但**全部对接本地假服务端**，不发出真实网络请求 |
+> | 真实联调过的接口 | 639 个业务接口里**只实测了 1 个**：`GET /goodlife/v1/trade/order/query/`（生活服务订单查询）。另外 `POST /oauth/client_token/`（换取应用级 token）也真实调用过，它属于凭据模块、不在那 639 个之内 |
+> | 其余 638 个业务接口 | **从未真实调用验证** |
+>
+> 换句话说：鉴权、token 换取与缓存、参数绑定、重试、错误归一化这些**公共链路**经过验证；
+> 而每个具体接口的**参数位置与字段名**是解析 Go 源码得到的，理论上与官方一致，实际仍以线上行为为准。
+>
+> 可能遇到的情况：个别接口还要求额外请求头、个别字段线上返回的类型与这里声明的类型不符（反序列化丢字段）、
+> 个别接口的参数位置在服务端有过调整。**接入生产前，请先把你实际要用的那几个接口逐一验证一遍。**
+>
+> 出问题时的自查手段：
+> - `catch (DouyinApiException ex) { Console.WriteLine(ex); }` —— 一次打印错误码、`log_id`、实际请求 URL、请求体、原始响应
+> - 跑 `samples/DouyinOpenApi.Diagnose`，把「SDK 发出的报文」与「裸 curl 发出的报文」对比
+> - 强类型模型对不上时，可用 `CommonOpenApiAsync` 直接发请求并拿原始 JSON（见第 8 节）
+
 对标官方 Go SDK [`github.com/bytedance/douyin-openapi-sdk-go`](https://github.com/bytedance/douyin-openapi-sdk-go)（v1.0.3）的 C# 实现。
 
 | 项目 | 数量 |
@@ -36,7 +58,8 @@
 | .NET Core 2.0+ / .NET 5~10 | `lib/netstandard2.0` | 同一份 dll |
 
 已在真实 .NET Framework 运行时上验证：构造客户端、发起 HTTPS 请求、解析平台错误码均正常
-（32 项测试在 `net47` 与 `net8.0` 两个目标上全绿）。
+（32 项测试在 `net47` 与 `net8.0` 两个目标上全绿）。**注意这是「运行时兼容性」验证，不等于业务接口可用性**——
+接口层面的验证范围见文首「项目来源与测试覆盖」。
 
 ## 2. 引用方式
 
@@ -52,7 +75,7 @@
 
 ```bash
 dotnet pack src/DouyinOpenApi -c Release
-# 得到 bin/Release/DouyinOpenApi.1.0.3.nupkg，放入本地源或私有 NuGet
+# 得到 bin/Release/DouyinOpenApi.<版本号>.nupkg，放入本地源或私有 NuGet
 ```
 
 ## 3. 快速开始
@@ -283,6 +306,7 @@ douyin-openapi-sdk-csharp/
 ├── .github/workflows/
 │   ├── ci.yml                     构建 + 测试 + 试打包
 │   └── release.yml                打 tag 自动发布到 NuGet 并建 Release
+├── docs/RELEASING.md              维护者文档：CI、OIDC 发布、排错清单（不随包分发）
 ├── tools/
 │   ├── parse_go.py                解析 Go SDK，产出中间表示
 │   └── gen_csharp.py              生成 C# 代码
@@ -311,69 +335,20 @@ dotnet build && dotnet test
 python tools/parse_go.py      # 输出 ir.json + 一组一致性校验结果
 ```
 
-## 11. CI 与发布到 NuGet
+## 11. 构建与发布（维护者）
 
-### 持续集成（`.github/workflows/ci.yml`）
+CI 状态见页面顶部徽章。构建、测试、打 tag 发布到 nuget.org 的完整流程，以及 OIDC 配置与
+踩坑记录，都放在维护者文档里：**[docs/RELEASING.md](docs/RELEASING.md)**。
 
-每次推 `main` 或提 PR 自动执行，全部跑在 `windows-latest`（`net47` 的测试需要 .NET Framework 运行时）：
+单独拆出去的原因：本 README 会通过 `<PackageReadmeFile>` 显示在 nuget.org 的包页面上，
+发布流程对装包的人是噪音。
 
-1. `dotnet restore`
-2. `dotnet build -c Release`（一次编出 net47 / netstandard2.0，测试工程再带 net8.0）
-3. `dotnet test -c Release`（net47 + net8.0 两套运行时各跑 32 项）
-4. `dotnet pack` 试打包 —— 防止「代码能编但包打不出来」
-5. 上传测试报告与 nupkg 作为构建产物，便于人工核对包内容
-
-只改文档（`*.md` / `LICENSE` / `NOTICE`）的提交不会触发，省 Actions 额度。
-
-### 自动发布（`.github/workflows/release.yml`）
-
-打 tag 即发布：
+想让本仓库发起 PR，先在本机跑：
 
 ```bash
-git tag v1.0.4
-git push origin v1.0.4
+dotnet build -c Release
+dotnet test  -c Release      # net47 + net8.0 两套运行时
 ```
-
-流水线会：按 tag 推导版本号 → 编译 → **跑全部测试（不过就不发）** → `dotnet pack -p:Version=1.0.4` →
-推到 nuget.org → 创建 GitHub Release 并附上 nupkg。
-
-也可以在 Actions 页面手动触发（`workflow_dispatch`），填入版本号发布，不依赖 tag。
-
-**发布凭证走 OIDC（Trusted Publishing），仓库里不存任何长期密钥。**
-
-一次性准备两步：
-
-1. **nuget.org** → 右上头像 → **Trusted Publishing** → Add new policy
-
-   | 字段 | 值 |
-   | --- | --- |
-   | Repository Owner | `zhangliang2008` |
-   | Repository | `douyin-openapi-sdk-csharp` |
-   | Workflow File | `release.yml`（只填文件名，**不带** `.github/workflows/` 前缀） |
-   | Environment | 留空（本工作流未用 GitHub Environments） |
-
-   同页配置 Scopes：允许 `Push new packages` 与 `Push new package versions`，Glob Pattern 填 `DouyinOpenApi`。
-
-2. **本仓库** → `Settings → Secrets and variables → Actions` → New repository secret
-
-   | 名称 | 值 |
-   | --- | --- |
-   | `NUGET_USER` | 你在 nuget.org 的用户名（profile name，**不是**邮箱） |
-
-工作流里的 `NuGet/login@v1` 会用 GitHub 签发的 OIDC token 换一个**有效期 1 小时**的临时 API Key，
-随后 `dotnet nuget push` 直接使用它——没有需要轮换的长期密钥。
-
-几个与 API Key 方式不同的坑（排错时有用）：
-
-- 临时 Key 只有 **1 小时**，所以「换 Key」必须紧挨在「推送」之前（本工作流已按此排序）；
-- 一个 OIDC token **只能换一次** Key，换取失败要重跑整个工作流；
-- 私有仓库首次建策略时是「**7 天临时生效**」，成功发布一次后才转永久（nuget.org 借此锁定仓库 ID）；
-- 想用 API Key 兜底也可以：删掉 `NuGet/login@v1` 那步，改回
-  `--api-key ${{ secrets.NUGET_API_KEY }}` 并在 secrets 里配 key。
-
-⚠️ 两点注意：
-- NuGet 的版本号**占用后不能删除**（只能 unlist），所以流水线把「跑测试」放在推送之前当作闸门；
-- 幂等：推送带了 `--skip-duplicate`，同一个版本重复跑不会报错失败。
 
 ## 12. 与 Go SDK 的行为差异（有意为之）
 
@@ -458,6 +433,11 @@ dotnet run --project samples/DouyinOpenApi.Diagnose
 
 ## 14. 已知限制
 
+- **639 个业务接口里只真实联调过 1 个**（`goodlife/v1/trade/order/query/`），其余仅由自动化测试以本地假服务端
+  覆盖「报文形态」，不校验服务端真实行为。范围与自查手段见文首「项目来源与测试覆盖」。
+- **生成的字段类型可能与线上返回不完全匹配**：类型由 Go 源码推导（例如 `map[int64][]*int64` →
+  `Dictionary<long, List<long>>`），若某个接口线上返回了类型不符的值，该字段会被静默丢弃
+  （Newtonsoft.Json 的默认行为），不会抛异常。字段缺失时建议先用 `CommonOpenApiAsync` 取原始 JSON 比对。
 - **GET 无法同时拥有 content-type 与「零 body」（.NET 平台限制）**：Content-Type 在 .NET 里属于
   "内容头"，想给 GET 加上就必须挂一个内容体，于是会多出 `Content-Length: 0`（或 chunked）。
   net472 是例外——`HttpWebRequest` 可以只设 `ContentType` 而不带长度，但那要求 GET 不能有内容体

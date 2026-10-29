@@ -24,8 +24,8 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
 
-    <!-- 与 Go SDK 版本对齐，便于两边对照排查 -->
-    <Version>1.0.3</Version>
+    <!-- 与 Go SDK 版本对齐，便于两边对照排查；发布时由 CI 用 -p:Version 覆盖 -->
+    <Version>1.0.4</Version>
     <Authors>zhangliang2008</Authors>
     <Description>抖音开放平台 OpenAPI SDK 的 C# 实现，兼容 .NET Framework 4.7+ 与 .NET Standard 2.0</Description>
     <PackageId>DouyinOpenApi</PackageId>
