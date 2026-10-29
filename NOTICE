@@ -17,7 +17,7 @@ Statement of changes (Apache License 2.0, Section 4(b)):
     from the original Go source file client/client.go by tools/gen_csharp.py.
     Field names, JSON keys and parameter placement (query / body / form /
     multipart) are preserved as-is.
-  * Runtime behaviour intentionally differs in several places; see section 11
+  * Runtime behaviour intentionally differs in several places; see section 12
     of README.md for the full list. Highlights: exponential backoff instead of
     immediate retry, TLS certificate verification enabled by default, GET
     requests sent without a body, and errors exposed with a separate LogId

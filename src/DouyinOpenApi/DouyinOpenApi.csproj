@@ -26,13 +26,21 @@
 
     <!-- 与 Go SDK 版本对齐，便于两边对照排查 -->
     <Version>1.0.3</Version>
-    <Authors>DouyinOpenApi for .NET</Authors>
+    <Authors>zhangliang2008</Authors>
     <Description>抖音开放平台 OpenAPI SDK 的 C# 实现，兼容 .NET Framework 4.7+ 与 .NET Standard 2.0</Description>
     <PackageId>DouyinOpenApi</PackageId>
-    <PackageTags>douyin;openapi;tiktok;bytedance;sdk</PackageTags>
+    <PackageTags>douyin;openapi;tiktok;bytedance;sdk;open-platform</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/bytedance/douyin-openapi-sdk-go</RepositoryUrl>
+
+    <!-- 本项目自己的仓库（供 NuGet 页面与 SourceLink 使用）；上游 Go 实现的地址见 PackageProjectUrl 与 NOTICE -->
+    <RepositoryUrl>https://github.com/zhangliang2008/douyin-openapi-sdk-csharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/zhangliang2008/douyin-openapi-sdk-csharp</PackageProjectUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <Copyright>Copyright (c) 2026 zhangliang2008. Apache-2.0. 原始 Go 实现 Copyright 2024 ByteDance Ltd.</Copyright>
+
+    <!-- CI 上生成确定性产物（相同源码产出相同 dll，便于校验） -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -44,6 +52,11 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <!--
+      net47 的参考程序集：Windows runner 上不一定装了 4.7 目标包，
+      显式依赖这个包可让构建在任何环境（含 Linux 上编译）都稳定。
+    -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <!--
       .NET Framework 的 HttpClient 位于独立的 System.Net.Http 程序集中，
       SDK 风格项目不会自动引用，必须显式声明，否则 net472 目标会报 CS0246。

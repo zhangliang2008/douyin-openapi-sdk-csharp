@@ -1,0 +1,60 @@
+name: CI
+
+# 每次推到 main / 每个 PR 都跑一遍：三个目标框架编译 + 全部测试 + 试打包
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - 'NOTICE'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# 同一分支的新推送会取消上一次未跑完的任务，省额度
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: 构建与测试
+    # net47 的测试必须跑在 Windows 上（需要 .NET Framework 运行时）
+    runs-on: windows-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 还原依赖
+        run: dotnet restore
+
+      - name: 编译（net47 / netstandard2.0 / net8.0）
+        run: dotnet build -c Release --no-restore
+
+      - name: 跑测试（net47 + net8.0）
+        run: dotnet test -c Release --no-build --logger "trx;LogFileName=test-result.trx"
+
+      - name: 试打包（不推送，仅验证 nupkg 能被正常生成）
+        run: dotnet pack src/DouyinOpenApi -c Release --no-build -o artifacts
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/test-result.trx'
+          if-no-files-found: ignore
+
+      - name: 上传 nupkg（供人工检查包内容）
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts/*.nupkg
+          if-no-files-found: warn

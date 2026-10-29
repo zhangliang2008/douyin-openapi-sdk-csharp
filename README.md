@@ -1,5 +1,9 @@
 # DouyinOpenApi —— 抖音开放平台 SDK（C# 版）
 
+[![CI](https://github.com/zhangliang2008/douyin-openapi-sdk-csharp/actions/workflows/ci.yml/badge.svg)](https://github.com/zhangliang2008/douyin-openapi-sdk-csharp/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/DouyinOpenApi.svg)](https://www.nuget.org/packages/DouyinOpenApi)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 对标官方 Go SDK [`github.com/bytedance/douyin-openapi-sdk-go`](https://github.com/bytedance/douyin-openapi-sdk-go)（v1.0.3）的 C# 实现。
 
 | 项目 | 数量 |
@@ -273,9 +277,12 @@ douyin-openapi-sdk-csharp/
 │   │   └── Internal/              参数绑定、JSON、错误解析（internal）
 │   ├── Models/                    生成：4127 个模型（23 个文件）
 │   └── Apis/                      生成：639 个接口（57 个文件，按业务模块分）
-├── tests/DouyinOpenApi.Tests/     23 个测试，net472 + net8.0 双跑
+├── tests/DouyinOpenApi.Tests/     32 个测试，net47 + net8.0 双跑
 ├── samples/DouyinOpenApi.Sample/  可运行示例
 ├── samples/DouyinOpenApi.Diagnose/ 接口报文诊断工具（报错但对不上文档时用）
+├── .github/workflows/
+│   ├── ci.yml                     构建 + 测试 + 试打包
+│   └── release.yml                打 tag 自动发布到 NuGet 并建 Release
 ├── tools/
 │   ├── parse_go.py                解析 Go SDK，产出中间表示
 │   └── gen_csharp.py              生成 C# 代码
@@ -304,7 +311,49 @@ dotnet build && dotnet test
 python tools/parse_go.py      # 输出 ir.json + 一组一致性校验结果
 ```
 
-## 11. 与 Go SDK 的行为差异（有意为之）
+## 11. CI 与发布到 NuGet
+
+### 持续集成（`.github/workflows/ci.yml`）
+
+每次推 `main` 或提 PR 自动执行，全部跑在 `windows-latest`（`net47` 的测试需要 .NET Framework 运行时）：
+
+1. `dotnet restore`
+2. `dotnet build -c Release`（一次编出 net47 / netstandard2.0，测试工程再带 net8.0）
+3. `dotnet test -c Release`（net47 + net8.0 两套运行时各跑 32 项）
+4. `dotnet pack` 试打包 —— 防止「代码能编但包打不出来」
+5. 上传测试报告与 nupkg 作为构建产物，便于人工核对包内容
+
+只改文档（`*.md` / `LICENSE` / `NOTICE`）的提交不会触发，省 Actions 额度。
+
+### 自动发布（`.github/workflows/release.yml`）
+
+打 tag 即发布：
+
+```bash
+git tag v1.0.4
+git push origin v1.0.4
+```
+
+流水线会：按 tag 推导版本号 → 编译 → **跑全部测试（不过就不发）** → `dotnet pack -p:Version=1.0.4` →
+推到 nuget.org → 创建 GitHub Release 并附上 nupkg。
+
+也可以在 Actions 页面手动触发（`workflow_dispatch`），填入版本号发布，不依赖 tag。
+
+**首次使用前必须配置密钥**：仓库 `Settings → Secrets and variables → Actions → New repository secret`
+
+| 名称 | 值 |
+| --- | --- |
+| `NUGET_API_KEY` | 到 [nuget.org](https://www.nuget.org/account/apikeys) 创建，Scope 选 `Push new packages and package versions`，Glob pattern 填 `DouyinOpenApi` |
+
+> 更安全的做法是 **Trusted Publishing（OIDC）**：nuget.org 上添加一条绑定本仓库的发布策略，
+> 工作流用 `NuGet/login@v1` 换取短期凭证，仓库里不存任何长期密钥。
+> `release.yml` 顶部的注释里写了具体改法。
+
+⚠️ 两点注意：
+- NuGet 的版本号**占用后不能删除**（只能 unlist），所以流水线把「跑测试」放在推送之前当作闸门；
+- 幂等：推送带了 `--skip-duplicate`，同一个版本重复跑不会报错失败。
+
+## 12. 与 Go SDK 的行为差异（有意为之）
 
 | 项 | Go SDK | 本 SDK | 原因 |
 | --- | --- | --- | --- |
@@ -322,7 +371,7 @@ python tools/parse_go.py      # 输出 ir.json + 一组一致性校验结果
 
 字段名、参数位置、body 补零值这三项**未做改动**，与 Go SDK 逐字段一致。
 
-## 12. 故障排查：`10002 参数错误` / `参数解析错误`
+## 13. 故障排查：`10002 参数错误` / `参数解析错误`
 
 这类错误最难查，因为它把「报文格式错」「参数值不对」「网关拒绝路由」都归成同一个码。
 按下面的顺序判断，通常三步内能定位：
@@ -385,7 +434,7 @@ dotnet run --project samples/DouyinOpenApi.Diagnose
 判读方式：`2` 成功、`3` 失败 → 是 body 的锅；`2`/`3` 都失败 → 是 token 或账号的锅，
 工具会直接给出对应错误码的解释。
 
-## 13. 已知限制
+## 14. 已知限制
 
 - **GET 无法同时拥有 content-type 与「零 body」（.NET 平台限制）**：Content-Type 在 .NET 里属于
   "内容头"，想给 GET 加上就必须挂一个内容体，于是会多出 `Content-Length: 0`（或 chunked）。
@@ -404,7 +453,7 @@ dotnet run --project samples/DouyinOpenApi.Diagnose
   `err_no` / `error_code` / `err.err_code` / `extra.error_code` 四类。
 - 生成代码未包含官方文档的中文注释（Go SDK 源码里也没有），字段含义请对照开放平台文档。
 
-## 14. 许可与归属
+## 15. 许可与归属
 
 本项目管理方式与原 Go SDK 一致，遵循 **Apache License 2.0**，全文见 [LICENSE](LICENSE)。
 

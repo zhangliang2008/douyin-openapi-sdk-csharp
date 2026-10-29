@@ -14,5 +14,6 @@ TestResults/
 _ref/
 
 # ---- 打包产物 ----
+artifacts/
 *.nupkg
 *.snupkg

@@ -1,0 +1,117 @@
+name: Release to NuGet
+
+# 打一个 v 开头的 tag 即自动发布，例如：
+#     git tag v1.0.4 && git push origin v1.0.4
+#
+# 首次使用前需要在仓库 Settings → Secrets and variables → Actions 里添加：
+#     NUGET_API_KEY = nuget.org 的 API Key（Scope 选 Push new packages and package versions）
+#
+# 更安全的替代方案（无需长期密钥）：nuget.org 的 Trusted Publishing（OIDC）
+#     1) nuget.org → Account → Trusted Publishing 添加策略，绑定本仓库与 workflow 文件名
+#     2) 本文件权限改为：permissions: { contents: write, id-token: write }
+#     3) 去掉下面的 NUGET_API_KEY，改用：
+#        - uses: NuGet/login@v1
+#          with: { user: '你的nuget用户名' }
+# 这样 GitHub 用短期 OIDC token 换取临时 NuGet 凭证，仓库里不存任何长期密钥。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要发布的版本号（如 1.0.4）。留空则取 tag 名去掉前缀 v'
+        required: false
+        type: string
+
+permissions:
+  contents: write     # 创建 GitHub Release 需要
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: 打包并发布到 NuGet.org
+    runs-on: windows-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # 取完整历史，便于 Release Notes 生成
+
+      - name: 安装 .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # ---------------------------------------------------------------------
+      # 版本号：优先用手动输入，否则取 tag 名去掉 v
+      # ---------------------------------------------------------------------
+      - name: 计算版本号
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_VERSION="${{ inputs.version }}"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::版本号 '$VERSION' 不合法，应形如 1.0.4 或 1.1.0-beta.1"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "将发布版本：$VERSION"
+
+      - name: 还原依赖
+        run: dotnet restore
+
+      # 发布前必须过测试：宁可不发，也不要把坏包推上 NuGet（版本号一旦占用无法撤回）
+      - name: 编译
+        run: dotnet build -c Release --no-restore -p:Version=${{ env.VERSION }}
+
+      - name: 跑测试
+        run: dotnet test -c Release --no-build -p:Version=${{ env.VERSION }}
+
+      - name: 打包
+        run: dotnet pack src/DouyinOpenApi -c Release --no-build -p:Version=${{ env.VERSION }} -o artifacts
+
+      - name: 列出产物（便于在日志里核对版本）
+        shell: bash
+        run: ls -la artifacts/
+
+      - name: 推送到 NuGet.org
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            echo "::error::未配置 NUGET_API_KEY。请在 Settings → Secrets → Actions 中添加。"
+            exit 1
+          fi
+          dotnet nuget push artifacts/*.nupkg \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: 创建 GitHub Release 并附上 nupkg
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.nupkg
+          generate_release_notes: true
+          name: v${{ env.VERSION }}
+          tag_name: v${{ env.VERSION }}
+          body: |
+            NuGet: https://www.nuget.org/packages/DouyinOpenApi/${{ env.VERSION }}
+
+            ```xml
+            <PackageReference Include="DouyinOpenApi" Version="${{ env.VERSION }}" />
+            ```
