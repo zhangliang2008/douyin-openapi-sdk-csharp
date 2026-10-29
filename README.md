@@ -339,15 +339,37 @@ git push origin v1.0.4
 
 也可以在 Actions 页面手动触发（`workflow_dispatch`），填入版本号发布，不依赖 tag。
 
-**首次使用前必须配置密钥**：仓库 `Settings → Secrets and variables → Actions → New repository secret`
+**发布凭证走 OIDC（Trusted Publishing），仓库里不存任何长期密钥。**
 
-| 名称 | 值 |
-| --- | --- |
-| `NUGET_API_KEY` | 到 [nuget.org](https://www.nuget.org/account/apikeys) 创建，Scope 选 `Push new packages and package versions`，Glob pattern 填 `DouyinOpenApi` |
+一次性准备两步：
 
-> 更安全的做法是 **Trusted Publishing（OIDC）**：nuget.org 上添加一条绑定本仓库的发布策略，
-> 工作流用 `NuGet/login@v1` 换取短期凭证，仓库里不存任何长期密钥。
-> `release.yml` 顶部的注释里写了具体改法。
+1. **nuget.org** → 右上头像 → **Trusted Publishing** → Add new policy
+
+   | 字段 | 值 |
+   | --- | --- |
+   | Repository Owner | `zhangliang2008` |
+   | Repository | `douyin-openapi-sdk-csharp` |
+   | Workflow File | `release.yml`（只填文件名，**不带** `.github/workflows/` 前缀） |
+   | Environment | 留空（本工作流未用 GitHub Environments） |
+
+   同页配置 Scopes：允许 `Push new packages` 与 `Push new package versions`，Glob Pattern 填 `DouyinOpenApi`。
+
+2. **本仓库** → `Settings → Secrets and variables → Actions` → New repository secret
+
+   | 名称 | 值 |
+   | --- | --- |
+   | `NUGET_USER` | 你在 nuget.org 的用户名（profile name，**不是**邮箱） |
+
+工作流里的 `NuGet/login@v1` 会用 GitHub 签发的 OIDC token 换一个**有效期 1 小时**的临时 API Key，
+随后 `dotnet nuget push` 直接使用它——没有需要轮换的长期密钥。
+
+几个与 API Key 方式不同的坑（排错时有用）：
+
+- 临时 Key 只有 **1 小时**，所以「换 Key」必须紧挨在「推送」之前（本工作流已按此排序）；
+- 一个 OIDC token **只能换一次** Key，换取失败要重跑整个工作流；
+- 私有仓库首次建策略时是「**7 天临时生效**」，成功发布一次后才转永久（nuget.org 借此锁定仓库 ID）；
+- 想用 API Key 兜底也可以：删掉 `NuGet/login@v1` 那步，改回
+  `--api-key ${{ secrets.NUGET_API_KEY }}` 并在 secrets 里配 key。
 
 ⚠️ 两点注意：
 - NuGet 的版本号**占用后不能删除**（只能 unlist），所以流水线把「跑测试」放在推送之前当作闸门；
