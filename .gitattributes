@@ -1,0 +1,16 @@
+# 统一换行：仓库内存 LF，检出到 Windows 时按需转 CRLF，避免跨平台 diff 噪音
+* text=auto
+
+*.cs        text diff=csharp
+*.csproj    text
+*.sln       text eol=crlf
+*.md        text
+*.py        text
+*.json      text
+*.yml       text
+
+# 二进制资源不参与文本处理
+*.nupkg     binary
+*.dll       binary
+*.png       binary
+*.jpg       binary

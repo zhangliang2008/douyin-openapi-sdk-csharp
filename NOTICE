@@ -1,0 +1,26 @@
+DouyinOpenApi (.NET SDK for Douyin Open Platform)
+Copyright 2024 ByteDance Ltd. and/or its affiliates.
+
+This product is a C# implementation derived from the official Go SDK:
+
+    douyin-openapi-sdk-go
+    https://github.com/bytedance/douyin-openapi-sdk-go
+    Copyright 2024 ByteDance Ltd. and/or its affiliates.
+    Licensed under the Apache License, Version 2.0
+
+Statement of changes (Apache License 2.0, Section 4(b)):
+
+  * The library is reimplemented in C# and targets .NET Framework 4.7 and
+    .NET Standard 2.0, instead of Go.
+  * All request/response models and the 639 API method signatures under
+    src/DouyinOpenApi/Models and src/DouyinOpenApi/Apis are machine-generated
+    from the original Go source file client/client.go by tools/gen_csharp.py.
+    Field names, JSON keys and parameter placement (query / body / form /
+    multipart) are preserved as-is.
+  * Runtime behaviour intentionally differs in several places; see section 11
+    of README.md for the full list. Highlights: exponential backoff instead of
+    immediate retry, TLS certificate verification enabled by default, GET
+    requests sent without a body, and errors exposed with a separate LogId
+    field instead of a formatted message string.
+
+The original Apache License 2.0 text is included in the LICENSE file.

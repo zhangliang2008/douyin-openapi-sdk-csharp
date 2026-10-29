@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    抖音开放平台 OpenAPI SDK（C# 实现）
+    ==================================================================
+    目标框架说明：
+      net47            原生 .NET Framework 目标，最低支持 4.7.0。
+                       只产出一份即可覆盖整个 4.7.x 系列：.NET Framework 不向后兼容
+                       （net471 的 dll 不能给 4.7.0 项目用），但反过来 net47 的 dll
+                       可以在 4.7 / 4.7.1 / 4.7.2 / 4.8 上运行 —— 这才是最小且不重复的集合
+      netstandard2.0   .NET Core 2.0+ / .NET 5~10 统一消费（net8/net9 引用该资产），
+                       同时兜住 .NET Framework 4.6.1 ~ 4.7 的极端场景
+
+    语言版本锁 7.3：net472 的默认编译器语言版本较低，显式锁 7.3 可避免
+    后续有人用 C# 8+ 语法（如可为空引用类型、switch 表达式）导致 net472 编译失败。
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net47;netstandard2.0</TargetFrameworks>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>DouyinOpenApi</AssemblyName>
+    <RootNamespace>DouyinOpenApi</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+
+    <!-- 与 Go SDK 版本对齐，便于两边对照排查 -->
+    <Version>1.0.3</Version>
+    <Authors>DouyinOpenApi for .NET</Authors>
+    <Description>抖音开放平台 OpenAPI SDK 的 C# 实现，兼容 .NET Framework 4.7+ 与 .NET Standard 2.0</Description>
+    <PackageId>DouyinOpenApi</PackageId>
+    <PackageTags>douyin;openapi;tiktok;bytedance;sdk</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/bytedance/douyin-openapi-sdk-go</RepositoryUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      net472 / netstandard2.0 上没有内置的 System.Text.Json，
+      选 Newtonsoft.Json 作为唯一外部依赖：两个目标框架都原生支持，且老项目基本已引用。
+    -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <!--
+      .NET Framework 的 HttpClient 位于独立的 System.Net.Http 程序集中，
+      SDK 风格项目不会自动引用，必须显式声明，否则 net472 目标会报 CS0246。
+    -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 单元测试需要直接验证 internal 的错误解析器与参数绑定器 -->
+    <InternalsVisibleTo Include="DouyinOpenApi.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 把仓库根目录的 README 打进 nupkg，避免 nuget.org/私有源上显示"缺少自述文件" -->
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+  </ItemGroup>
+
+</Project>
